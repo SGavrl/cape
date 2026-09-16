@@ -64,33 +64,40 @@ def random_wrong_label(correct: int, num_labels: int):
     return RNG.choice(choices)
 
 
-def convert_banking77(split):
-    label_names = split.features["label"].names
+def convert_banking77(
+    split,
+    label_names,
+):
     examples = []
 
     for row in split:
         text = row["text"]
-        correct = row["label"]
+        correct_name = row["category"]
 
-        wrong = random_wrong_label(
-            correct,
-            len(label_names),
+        wrong_choices = [
+            name
+            for name in label_names
+            if name != correct_name
+        ]
+
+        wrong_name = RNG.choice(
+            wrong_choices
         )
 
-        correct_name = label_names[
-            correct
-        ].replace("_", " ")
+        correct_name_text = (
+            correct_name.replace("_", " ")
+        )
 
-        wrong_name = label_names[
-            wrong
-        ].replace("_", " ")
+        wrong_name_text = (
+            wrong_name.replace("_", " ")
+        )
 
         examples.append(
             cape_example(
                 context=text,
                 assertion=(
                     "This customer request is about "
-                    f"{correct_name}."
+                    f"{correct_name_text}."
                 ),
                 label=1,
                 source="banking77",
@@ -102,7 +109,7 @@ def convert_banking77(split):
                 context=text,
                 assertion=(
                     "This customer request is about "
-                    f"{wrong_name}."
+                    f"{wrong_name_text}."
                 ),
                 label=0,
                 source="banking77",
@@ -288,8 +295,44 @@ def main():
 
     print("Downloading BANKING77...")
 
+    # Current Hugging Face `datasets` versions no longer
+    # execute BANKING77's legacy dataset script. Load the
+    # original CSV files directly instead.
+    BANKING77_TRAIN_URL = (
+        "https://raw.githubusercontent.com/"
+        "PolyAI-LDN/task-specific-datasets/"
+        "master/banking_data/train.csv"
+    )
+
+    BANKING77_TEST_URL = (
+        "https://raw.githubusercontent.com/"
+        "PolyAI-LDN/task-specific-datasets/"
+        "master/banking_data/test.csv"
+    )
+
     banking = load_dataset(
-        "PolyAI/banking77"
+        "csv",
+        data_files={
+            "train": BANKING77_TRAIN_URL,
+            "test": BANKING77_TEST_URL,
+        },
+    )
+
+    banking_labels = sorted(
+        set(
+            banking["train"]["category"]
+        )
+    )
+
+    if len(banking_labels) != 77:
+        raise RuntimeError(
+            "Expected 77 BANKING77 labels, "
+            f"found {len(banking_labels)}."
+        )
+
+    print(
+        f"BANKING77 labels: "
+        f"{len(banking_labels)}"
     )
 
     banking_train, banking_val = (
@@ -300,13 +343,16 @@ def main():
 
     banking_examples = {
         "train": convert_banking77(
-            banking_train
+            banking_train,
+            banking_labels,
         ),
         "validation": convert_banking77(
-            banking_val
+            banking_val,
+            banking_labels,
         ),
         "test": convert_banking77(
-            banking["test"]
+            banking["test"],
+            banking_labels,
         ),
     }
 
@@ -429,3 +475,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
