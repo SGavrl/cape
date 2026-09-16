@@ -4,7 +4,7 @@ CAPE stands for **Calibrated Assertion Probability Estimator**.
 
 The idea is simple:
 
-> Given some context and a natural-language assertion, estimate how likely the assertion is to be true.
+Given some context and a natural-language assertion, estimate how likely the assertion is to be true.
 
 Example:
 
