@@ -12,7 +12,9 @@ class CAPEModel(nn.Module):
     ):
         super().__init__()
 
-        self.encoder = AutoModel.from_pretrained(model_name)
+        self.encoder = AutoModel.from_pretrained(
+                model_name
+                ).float()
 
         hidden_size = self.encoder.config.hidden_size
 
