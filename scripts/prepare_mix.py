@@ -363,7 +363,7 @@ def main():
     print("Downloading AG News...")
 
     ag = load_dataset(
-        "ag_news"
+        "fancyzhx/ag_news"
     )
 
     ag_train_source = (
