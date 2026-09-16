@@ -17,8 +17,13 @@ OUTPUTS = {
     "test": DATA_DIR / "mix_test.jsonl",
 }
 
-# AG News is large enough that it would otherwise dominate the mix.
-AG_NEWS_TRAIN_LIMIT = 30_000
+# Keep any one source from dominating CAPE-Mix training.
+MNLI_TRAIN_LIMIT = 150_000
+AG_NEWS_TRAIN_LIMIT = 50_000
+
+# BANKING77 is much smaller than the other sources. For training,
+# create several balanced positive/negative assertion pairs per query.
+BANKING77_TRAIN_PAIRS = 3
 
 
 def cape_example(
@@ -67,8 +72,26 @@ def random_wrong_label(correct: int, num_labels: int):
 def convert_banking77(
     split,
     label_names,
+    pairs_per_example=1,
 ):
     examples = []
+
+    assertion_templates = [
+        "This customer request is about {label}.",
+        "The customer's issue concerns {label}.",
+        "The appropriate support category is {label}.",
+    ]
+
+    if pairs_per_example < 1:
+        raise ValueError(
+            "pairs_per_example must be at least 1."
+        )
+
+    if pairs_per_example > len(assertion_templates):
+        raise ValueError(
+            "pairs_per_example cannot exceed "
+            f"{len(assertion_templates)}."
+        )
 
     for row in split:
         text = row["text"]
@@ -80,41 +103,47 @@ def convert_banking77(
             if name != correct_name
         ]
 
-        wrong_name = RNG.choice(
-            wrong_choices
+        wrong_names = RNG.sample(
+            wrong_choices,
+            k=pairs_per_example,
         )
 
         correct_name_text = (
             correct_name.replace("_", " ")
         )
 
-        wrong_name_text = (
-            wrong_name.replace("_", " ")
-        )
+        for pair_index, wrong_name in enumerate(
+            wrong_names
+        ):
+            template = assertion_templates[
+                pair_index
+            ]
 
-        examples.append(
-            cape_example(
-                context=text,
-                assertion=(
-                    "This customer request is about "
-                    f"{correct_name_text}."
-                ),
-                label=1,
-                source="banking77",
+            wrong_name_text = (
+                wrong_name.replace("_", " ")
             )
-        )
 
-        examples.append(
-            cape_example(
-                context=text,
-                assertion=(
-                    "This customer request is about "
-                    f"{wrong_name_text}."
-                ),
-                label=0,
-                source="banking77",
+            examples.append(
+                cape_example(
+                    context=text,
+                    assertion=template.format(
+                        label=correct_name_text
+                    ),
+                    label=1,
+                    source="banking77",
+                )
             )
-        )
+
+            examples.append(
+                cape_example(
+                    context=text,
+                    assertion=template.format(
+                        label=wrong_name_text
+                    ),
+                    label=0,
+                    source="banking77",
+                )
+            )
 
     return examples
 
@@ -289,6 +318,19 @@ def main():
         ),
     }
 
+    RNG.shuffle(
+        mnli["train"]
+    )
+
+    mnli["train"] = mnli[
+        "train"
+    ][:MNLI_TRAIN_LIMIT]
+
+    print(
+        f"MNLI train examples used: "
+        f"{len(mnli['train']):,}"
+    )
+
     # -----------------------------------
     # BANKING77
     # -----------------------------------
@@ -345,14 +387,19 @@ def main():
         "train": convert_banking77(
             banking_train,
             banking_labels,
+            pairs_per_example=(
+                BANKING77_TRAIN_PAIRS
+            ),
         ),
         "validation": convert_banking77(
             banking_val,
             banking_labels,
+            pairs_per_example=1,
         ),
         "test": convert_banking77(
             banking["test"],
             banking_labels,
+            pairs_per_example=1,
         ),
     }
 
@@ -475,4 +522,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
