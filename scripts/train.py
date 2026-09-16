@@ -16,7 +16,7 @@ VAL_PATH = "data/validation.jsonl"
 
 CHECKPOINT_DIR = Path("checkpoints")
 
-BATCH_SIZE = 16
+BATCH_SIZE = 32
 MAX_LENGTH = 256
 
 EPOCHS = 2
@@ -26,7 +26,7 @@ WEIGHT_DECAY = 0.01
 WARMUP_RATIO = 0.06
 
 # Temporary sanity-run limit. Set to None for a full training run.
-MAX_TRAIN_STEPS = 200
+MAX_TRAIN_STEPS = None
 
 
 def evaluate(model, loader, device):
@@ -234,9 +234,9 @@ def main():
             ):
                 stop_training = True
 
-            if global_step % 10 == 0:
+            if global_step % 100 == 0:
                 avg_loss = (
-                    running_loss / 10
+                    running_loss / 100
                 )
 
                 lr = scheduler.get_last_lr()[0]
