@@ -1,0 +1,12 @@
+{"context":"The customer says their card was charged twice.","assertion":"This is a billing issue.","min_probability":0.75,"name":"duplicate charge -> billing"}
+{"context":"The customer says their card was charged twice.","assertion":"This is a networking issue.","max_probability":0.25,"name":"duplicate charge != networking"}
+{"context":"The customer says their card was charged twice.","assertion":"The customer experienced a duplicate charge.","min_probability":0.90,"name":"duplicate charge explicit"}
+{"context":"The patch introduces a global mutex around a frequently called allocator.","assertion":"This change may create concurrency risk.","min_probability":0.75,"name":"mutex -> concurrency risk"}
+{"context":"The patch introduces a global mutex around a frequently called allocator.","assertion":"This change is related to memory allocation.","min_probability":0.75,"name":"allocator -> memory allocation"}
+{"context":"The patch introduces a global mutex around a frequently called allocator.","assertion":"This change is about image compression.","max_probability":0.25,"name":"allocator != image compression"}
+{"context":"Apple unveiled a new processor for its laptop computers.","assertion":"This is about technology.","min_probability":0.75,"name":"processor -> technology"}
+{"context":"Apple unveiled a new processor for its laptop computers.","assertion":"This is primarily about professional basketball.","max_probability":0.25,"name":"processor != sports"}
+{"context":"I absolutely hated this movie and would never watch it again.","assertion":"The author expresses a negative opinion.","min_probability":0.75,"name":"negative sentiment"}
+{"context":"I absolutely hated this movie and would never watch it again.","assertion":"The author expresses a positive opinion.","max_probability":0.25,"name":"negative != positive"}
+{"context":"My cash withdrawal was declined by the ATM.","assertion":"This customer request concerns a cash withdrawal problem.","min_probability":0.75,"name":"withdrawal routing"}
+{"context":"My cash withdrawal was declined by the ATM.","assertion":"This customer request concerns card delivery.","max_probability":0.25,"name":"withdrawal != card delivery"}
