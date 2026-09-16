@@ -16,7 +16,7 @@ VAL_PATH = "data/validation.jsonl"
 
 CHECKPOINT_DIR = Path("checkpoints")
 
-BATCH_SIZE = 32
+BATCH_SIZE = 16
 MAX_LENGTH = 256
 
 EPOCHS = 2
@@ -24,6 +24,9 @@ EPOCHS = 2
 LEARNING_RATE = 2e-5
 WEIGHT_DECAY = 0.01
 WARMUP_RATIO = 0.06
+
+# Temporary sanity-run limit. Set to None for a full training run.
+MAX_TRAIN_STEPS = 200
 
 
 def evaluate(model, loader, device):
@@ -44,15 +47,21 @@ def evaluate(model, loader, device):
                 for key, value in batch.items()
             }
 
-            with torch.autocast(
-                device_type="cuda",
-                dtype=torch.bfloat16,
-            ):
-                logits = model(**batch)
+            logits = model(**batch)
 
-                loss = criterion(
-                    logits,
-                    labels,
+            loss = criterion(
+                logits,
+                labels,
+            )
+
+            if not torch.isfinite(logits).all():
+                raise RuntimeError(
+                    "Non-finite logits detected during evaluation."
+                )
+
+            if not torch.isfinite(loss):
+                raise RuntimeError(
+                    f"Non-finite evaluation loss detected: {loss.item()}"
                 )
 
             probabilities = torch.sigmoid(
@@ -86,6 +95,8 @@ def main():
         )
 
     device = torch.device("cuda")
+
+    torch.set_float32_matmul_precision("high")
 
     print("GPU:", torch.cuda.get_device_name(0))
 
@@ -158,6 +169,7 @@ def main():
     best_val_loss = math.inf
 
     global_step = 0
+    stop_training = False
 
     for epoch in range(EPOCHS):
         model.train()
@@ -185,15 +197,21 @@ def main():
                 set_to_none=True
             )
 
-            with torch.autocast(
-                device_type="cuda",
-                dtype=torch.bfloat16,
-            ):
-                logits = model(**batch)
+            logits = model(**batch)
 
-                loss = criterion(
-                    logits,
-                    labels,
+            loss = criterion(
+                logits,
+                labels,
+            )
+
+            if not torch.isfinite(logits).all():
+                raise RuntimeError(
+                    "Non-finite logits detected during evaluation."
+                )
+
+            if not torch.isfinite(loss):
+                raise RuntimeError(
+                    f"Non-finite evaluation loss detected: {loss.item()}"
                 )
 
             loss.backward()
@@ -210,9 +228,15 @@ def main():
 
             global_step += 1
 
-            if global_step % 100 == 0:
+            if (
+                MAX_TRAIN_STEPS is not None
+                and global_step >= MAX_TRAIN_STEPS
+            ):
+                stop_training = True
+
+            if global_step % 10 == 0:
                 avg_loss = (
-                    running_loss / 100
+                    running_loss / 10
                 )
 
                 lr = scheduler.get_last_lr()[0]
@@ -224,6 +248,9 @@ def main():
                 )
 
                 running_loss = 0.0
+
+            if stop_training:
+                break
 
         metrics = evaluate(
             model,
@@ -263,6 +290,13 @@ def main():
             )
 
             print("saved new best checkpoint")
+
+        if stop_training:
+            print(
+                f"Sanity run complete at step {global_step}. "
+                "Set MAX_TRAIN_STEPS = None for a full run."
+            )
+            break
 
 
 if __name__ == "__main__":
