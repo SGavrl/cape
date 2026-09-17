@@ -1,0 +1,304 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+/home/kenny/cape/.venv/lib/python3.11/site-packages/torch/jit/_script.py:1491: FutureWarning: `torch.jit.script` is deprecated. Please switch to `torch.compile` or `torch.export`.
+  warnings.warn(
+Loading weights:   0%|          | 0/102 [00:00<?, ?it/s]Loading weights: 100%|██████████| 102/102 [00:00<00:00, 15698.05it/s]
+[transformers] [1mDebertaV2Model LOAD REPORT[0m from: microsoft/deberta-v3-small
+Key                                     | Status     |  | 
+----------------------------------------+------------+--+-
+mask_predictions.dense.weight           | UNEXPECTED |  | 
+mask_predictions.classifier.bias        | UNEXPECTED |  | 
+lm_predictions.lm_head.bias             | UNEXPECTED |  | 
+mask_predictions.dense.bias             | UNEXPECTED |  | 
+mask_predictions.LayerNorm.weight       | UNEXPECTED |  | 
+lm_predictions.lm_head.LayerNorm.bias   | UNEXPECTED |  | 
+mask_predictions.LayerNorm.bias         | UNEXPECTED |  | 
+lm_predictions.lm_head.dense.bias       | UNEXPECTED |  | 
+mask_predictions.classifier.weight      | UNEXPECTED |  | 
+lm_predictions.lm_head.dense.weight     | UNEXPECTED |  | 
+lm_predictions.lm_head.LayerNorm.weight | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+
+CAPE-Mix-v1 hard challenge
+====================================================================================================
+{'checkpoint': 'checkpoints/cape_mix_v1.pt', 'model_name': 'microsoft/deberta-v3-small', 'model_version': 'cape-mix-v1', 'epoch': 2, 'temperature': 1.646063208580017, 'device': 'cpu', 'max_length': 256}
+
+
+####################################################################################################
+PARAPHRASE_AND_ENTAILMENT
+####################################################################################################
+
+[001]  12.70% | A person is in the water.
+      A woman is swimming across the lake.
+
+[002]  97.82% | Someone is swimming.
+      A woman is swimming across the lake.
+
+[003]   1.06% | The woman is dry.
+      A woman is swimming across the lake.
+
+[004]  98.98% | John bought something.
+      John purchased a vehicle yesterday.
+
+[005]  99.23% | John bought a car.
+      John purchased a vehicle yesterday.
+
+[006]  99.28% | An animal was moving quickly.
+      The dog sprinted through the yard.
+
+
+
+####################################################################################################
+NEGATION
+####################################################################################################
+
+[007]   2.80% | The server restarted.
+      The server did not restart.
+
+[008]  98.10% | The server remained running.
+      The server did not restart.
+
+[009]   2.06% | Users reported an outage.
+      No users reported an outage.
+
+[010]   1.02% | Every request failed.
+      Not every request failed.
+
+[011]  98.67% | At least one request did not fail.
+      Not every request failed.
+
+
+
+####################################################################################################
+UNCERTAINTY
+####################################################################################################
+
+[012]  81.95% | The application definitely has a memory leak.
+      The application became slower after several hours.
+
+[013]  99.02% | The application may have a performance problem.
+      The application became slower after several hours.
+
+[014]   1.19% | The deployment caused a severe performance regression.
+      CPU usage increased slightly after the deployment.
+
+[015]  98.46% | There may be a reliability problem.
+      Three users reported intermittent errors.
+
+[016]   0.90% | The service is definitely broken for everyone.
+      Three users reported intermittent errors.
+
+
+
+####################################################################################################
+CODE_SEMANTICS
+####################################################################################################
+
+[017]  89.39% | This may cause a use-after-free bug.
+      The allocator retains references to objects after they are freed.
+
+[018]  32.80% | This may create a memory safety issue.
+      The allocator retains references to objects after they are freed.
+
+[019]  95.03% | This code may access invalid memory.
+      A pointer is dereferenced after the memory it points to has been freed.
+
+[020]  92.37% | This code may contain a race condition.
+      Two threads modify the same shared variable without synchronization.
+
+[021]  91.83% | This code concerns concurrency.
+      Two threads modify the same shared variable without synchronization.
+
+[022]  89.43% | The program may be deadlocked.
+      Every worker holds one lock while waiting for another worker's lock.
+
+[023]  91.94% | This code may have a performance problem.
+      A loop performs a database query once for every item.
+
+[024]  69.16% | This change may alter runtime behavior.
+      The patch only changes a comment.
+
+
+
+####################################################################################################
+PERFORMANCE
+####################################################################################################
+
+[025]  87.01% | This change may affect performance.
+      The patch adds several if statements.
+
+[026]  97.74% | This change may affect performance.
+      The patch adds hundreds of branches inside a loop executed millions of times per second.
+
+[027]   0.70% | This change is likely to cause a major performance regression.
+      The patch adds validation checks to a settings page opened once per month.
+
+[028]  45.97% | This change may reduce performance.
+      A function now performs an O(n^2) search instead of using a hash table.
+
+[029]  16.00% | This change is likely to hurt performance.
+      A frequently called function now sleeps for one second before returning.
+
+
+
+####################################################################################################
+RETRIEVAL
+####################################################################################################
+
+[030]  98.67% | The document is relevant to the question.
+      Question: How does TLS encrypt network traffic?
+Document: TLS establishes encrypted communication using cryptographic protocols.
+
+[031]  96.30% | The document is relevant to the question.
+      Question: How does TLS encrypt network traffic?
+Document: TLS commonly uses certificates to authenticate endpoints.
+
+[032]  97.59% | The document is relevant to the question.
+      Question: How does TLS encrypt network traffic?
+Document: Encryption protects information from unauthorized readers.
+
+[033]  40.53% | The document is relevant to the question.
+      Question: How does TLS encrypt network traffic?
+Document: Basketball was invented in 1891.
+
+[034]  92.06% | The document is relevant to the question.
+      Question: How does TLS encrypt network traffic?
+Document: Michael Jordan won six NBA championships.
+
+[035]  93.45% | The document helps answer the question.
+      Question: Why is the sky blue?
+Document: Rayleigh scattering affects shorter wavelengths more strongly than longer wavelengths.
+
+
+
+####################################################################################################
+CAUSAL_REASONING
+####################################################################################################
+
+[036]  98.25% | The database may become unavailable.
+      The database server lost power.
+
+[037]  83.50% | The database definitely lost all stored data.
+      The database server lost power.
+
+[038]   1.52% | New writes may fail.
+      The disk is completely full.
+
+[039]  96.89% | The machine may have a thermal problem.
+      The CPU temperature reached 105 degrees Celsius.
+
+[040]  96.33% | Network connectivity may be affected.
+      A cable was unplugged from the network switch.
+
+
+
+####################################################################################################
+TEMPORAL_REASONING
+####################################################################################################
+
+[041]  19.69% | Alice arrived before Charlie.
+      Alice arrived before Bob. Bob arrived before Charlie.
+
+[042]   4.70% | Charlie arrived before Alice.
+      Alice arrived before Bob. Bob arrived before Charlie.
+
+[043]   6.63% | The backup was completed when deployment began.
+      The backup completed before the deployment started.
+
+[044]   7.57% | The configuration change happened before the failure.
+      The service failed after the configuration change.
+
+
+
+####################################################################################################
+COREFERENCE
+####################################################################################################
+
+[045]  96.76% | Sarah previously possessed the laptop.
+      Sarah gave Emma the laptop because she no longer needed it.
+
+[046]  16.40% | James definitely arrived home.
+      Tom called James after he arrived home.
+
+[047]  98.79% | The client may have had an invalid certificate.
+      The server rejected the client because it had an invalid certificate.
+
+
+
+####################################################################################################
+QUANTIFIERS
+####################################################################################################
+
+[048]  68.38% | At least one server is online.
+      Every server in the cluster is online.
+
+[049]   0.74% | Every request failed.
+      Some requests failed.
+
+[050]  99.00% | At least one request failed.
+      Some requests failed.
+
+[051]   2.03% | At least one transaction was rejected.
+      No transactions were rejected.
+
+
+
+####################################################################################################
+NUMBERS
+####################################################################################################
+
+[052]  91.59% | Latency increased.
+      The old latency was 100 ms. The new latency is 200 ms.
+
+[053]  66.76% | Latency doubled.
+      The old latency was 100 ms. The new latency is 200 ms.
+
+[054]  96.66% | The price decreased by 20 percent.
+      The price fell from $100 to $80.
+
+[055]  98.56% | The failure rate is 20 percent.
+      There are 20 failed requests out of 100 total requests.
+
+
+
+####################################################################################################
+COMMONSENSE
+####################################################################################################
+
+[056]  98.72% | The glass is broken.
+      The glass fell onto concrete and shattered.
+
+[057]   0.56% | The glass is intact.
+      The glass fell onto concrete and shattered.
+
+[058]  97.02% | The ground may be wet.
+      Heavy rain continued all night.
+
+[059]  98.10% | The person may be tired.
+      A person has not slept for two days.
+
+[060]  91.39% | The food inside may no longer be frozen.
+      The freezer has been unplugged for three days.
+
+
+
+####################################################################################################
+WEIRD_OOD
+####################################################################################################
+
+[061]   1.81% | This is a networking issue.
+      The customer says everything feels strange today.
+
+[062]   9.47% | The product uses artificial intelligence.
+      The company announced a mysterious new product.
+
+[063]  85.56% | The code is better.
+      A developer added several new functions.
+
+[064]  30.07% | The server is compromised.
+      The server emitted an unfamiliar warning.
+
+[065]   4.10% | The company is going bankrupt.
+      Revenue decreased this month.
+
