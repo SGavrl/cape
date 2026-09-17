@@ -1,0 +1,43 @@
+CAPE-Mix-v1
+
+Backbone:
+microsoft/deberta-v3-small
+
+Training sources:
+- MNLI
+- BANKING77
+- AG News
+- SST-2
+
+Training examples:
+429,974
+
+Checkpoint source:
+mix_v1 epoch 2
+
+Calibration:
+Temperature scaling on mix_validation.jsonl
+
+Temperature:
+1.646063
+
+Mixed test set:
+29,807 examples
+
+Accuracy:
+96.16%
+
+AUROC:
+0.9922
+
+NLL:
+0.1103
+
+Brier score:
+0.0300
+
+ECE:
+0.0069
+
+Semantic probes:
+12/12
