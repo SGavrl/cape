@@ -16,12 +16,12 @@ from cape.dataset import make_collate_fn
 
 
 DEFAULT_CHECKPOINTS = [
-    "checkpoints/mix_v1/best.pt",
     "checkpoints/mix_v1/last.pt",
+    "checkpoints/cape_mix_v1.pt",
 ]
 
 DEFAULT_TEST_PATH = "data/mix_test.jsonl"
-DEFAULT_OUTPUT_DIR = "evaluation/mix_v1"
+DEFAULT_OUTPUT_DIR = "evaluation/cape_mix_v1"
 
 BATCH_SIZE = 64
 MAX_LENGTH = 256
@@ -332,6 +332,7 @@ def run_inference(
     tokenizer,
     examples,
     device,
+    temperature,
 ):
     dataset = EvalDataset(
         examples
@@ -388,6 +389,7 @@ def run_inference(
 
             probabilities = torch.sigmoid(
                 logits.float()
+                / temperature
             )
 
             all_probabilities.append(
@@ -427,6 +429,13 @@ def evaluate_checkpoint(
         weights_only=False,
     )
 
+    temperature = float(
+        checkpoint.get(
+            "temperature",
+            1.0,
+        )
+    )
+
     model_name = checkpoint[
         "model_name"
     ]
@@ -454,6 +463,7 @@ def evaluate_checkpoint(
             tokenizer,
             examples,
             device,
+            temperature,
         )
     )
 
@@ -495,9 +505,14 @@ def evaluate_checkpoint(
         "epoch": checkpoint.get(
             "epoch"
         ),
+        "temperature": temperature,
         "overall": overall,
         "by_source": by_source,
     }
+
+    print(
+        f"Temperature:    {temperature:.6f}"
+    )
 
     print_metrics(
         "overall",
@@ -789,6 +804,7 @@ def main():
 
     print(
         f"{'checkpoint':<20} "
+        f"{'temp':>8} "
         f"{'acc':>8} "
         f"{'AUROC':>8} "
         f"{'NLL':>8} "
@@ -815,6 +831,7 @@ def main():
 
         print(
             f"{name:<20} "
+            f"{result['temperature']:>8.4f} "
             f"{metrics['accuracy']:>8.4f} "
             f"{auroc_text:>8} "
             f"{metrics['nll']:>8.4f} "

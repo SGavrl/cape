@@ -6,7 +6,7 @@ from transformers import AutoTokenizer
 from cape.cape_model import CAPEModel
 
 
-DEFAULT_CHECKPOINT = "checkpoints/best.pt"
+DEFAULT_CHECKPOINT = "checkpoints/cape_mix_v1.pt"
 
 
 def load_cape(checkpoint_path: str, device: torch.device):
@@ -33,7 +33,14 @@ def load_cape(checkpoint_path: str, device: torch.device):
     model = model.to(device)
     model.eval()
 
-    return model, tokenizer, checkpoint
+    temperature = float(
+        checkpoint.get(
+            "temperature",
+            1.0,
+        )
+    )
+
+    return model, tokenizer, checkpoint, temperature
 
 
 @torch.inference_mode()
@@ -43,6 +50,7 @@ def judge(
     device,
     context: str,
     assertion: str,
+    temperature: float = 1.0,
 ):
     inputs = tokenizer(
         context,
@@ -61,6 +69,7 @@ def judge(
 
     probability = torch.sigmoid(
         logits.float()
+        / temperature
     ).item()
 
     return probability
@@ -100,7 +109,7 @@ def main():
 
     print(f"Device: {device}")
 
-    model, tokenizer, checkpoint = load_cape(
+    model, tokenizer, checkpoint, temperature = load_cape(
         args.checkpoint,
         device,
     )
@@ -108,6 +117,10 @@ def main():
     print(
         f"Loaded CAPE checkpoint "
         f"from epoch {checkpoint.get('epoch', '?')}"
+    )
+
+    print(
+        f"Temperature: {temperature:.6f}"
     )
 
     context = args.context
@@ -120,6 +133,7 @@ def main():
             device,
             context,
             assertion,
+            temperature,
         )
 
         print()
@@ -158,6 +172,7 @@ def main():
                 device,
                 context,
                 assertion,
+                temperature,
             )
 
             print()
@@ -174,3 +189,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -39,7 +39,14 @@ def load_model(
     model = model.to(device)
     model.eval()
 
-    return model, tokenizer
+    temperature = float(
+        checkpoint.get(
+            "temperature",
+            1.0,
+        )
+    )
+
+    return model, tokenizer, temperature
 
 
 @torch.inference_mode()
@@ -49,6 +56,7 @@ def judge(
     device,
     context,
     assertion,
+    temperature,
 ):
     tokens = tokenizer(
         context,
@@ -67,6 +75,7 @@ def judge(
 
     return torch.sigmoid(
         logits.float()
+        / temperature
     ).item()
 
 
@@ -75,7 +84,7 @@ def main():
 
     parser.add_argument(
         "--checkpoint",
-        default="checkpoints/best.pt",
+        default="checkpoints/cape_mix_v1.pt",
     )
 
     parser.add_argument(
@@ -100,9 +109,13 @@ def main():
     else:
         device = torch.device("cpu")
 
-    model, tokenizer = load_model(
+    model, tokenizer, temperature = load_model(
         args.checkpoint,
         device,
+    )
+
+    print(
+        f"Temperature: {temperature:.6f}"
     )
 
     probes = []
@@ -130,6 +143,7 @@ def main():
             device,
             probe["context"],
             probe["assertion"],
+            temperature,
         )
 
         success = True
@@ -188,3 +202,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
