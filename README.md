@@ -2,7 +2,8 @@
 
 CAPE is a Calibrated Assertion Probability Estimator. Given a context and a
 natural-language assertion, it returns an estimated probability that the
-assertion is supported by the context.
+assertion is warranted by the context, allowing ordinary background knowledge.
+Topical association or unsupported plausibility alone is not support.
 
 ```python
 from cape import CAPE
@@ -67,6 +68,24 @@ CAPE_EXTRA_TRAIN_DATA=path/to/extra.jsonl python scripts/prepare_v1_1.py
 Each JSONL row must contain `context`, `assertion`, and a numeric `label`
 between 0 and 1. The optional `source` field defaults to `supplemental`.
 
+### v1.2 experiments
+
+The v1.2 work is an experiment suite; no v1.2 model is accepted until its
+semantic, calibration, retention, and efficiency results are measured. Prepare
+its public and deterministic data after preparing v1.1:
+
+```bash
+python scripts/prepare_v1_2.py
+python scripts/prepare_robustness.py
+python scripts/prepare_workflows.py
+```
+
+The generic v1.2 row schema uses `target` for warranted support and may include
+`nli_label`, `relevance_label`, or `strength_label`. Missing auxiliary labels
+are masked. Legacy `label` rows remain supported. See
+[`docs/v1_2.md`](docs/v1_2.md) for the semantic contract, data provenance,
+holdout policy, architecture candidates, and experiment protocol.
+
 ## Training
 
 Training is configured with environment variables and requires CUDA:
@@ -83,6 +102,17 @@ Available settings include `CAPE_MODEL_NAME`, `CAPE_BATCH_SIZE`,
 `CAPE_INIT_CHECKPOINT` to initialize a run from an existing compatible CAPE
 checkpoint. Checkpoints are written beneath `checkpoints/` and excluded from
 Git.
+
+Train a v1.2 candidate on CUDA with `scripts/train_v1_2.py`. The default is the
+multi-task cross-encoder; `cross_encoder` is the scalar control and
+`shared_context_multitask` is the fan-out prototype:
+
+```bash
+CAPE_ARCHITECTURE=cross_encoder_multitask \
+CAPE_INIT_CHECKPOINT=checkpoints/cape_v1_1.pt \
+CAPE_CHECKPOINT_DIR=checkpoints/cape_v1_2_multitask \
+python -u scripts/train_v1_2.py
+```
 
 ## Calibration and evaluation
 
@@ -127,6 +157,11 @@ python scripts/challenge.py --checkpoint checkpoints/cape_mix_v1.pt
 python scripts/run_probes.py --checkpoint checkpoints/cape_mix_v1.pt --strict
 python scripts/benchmark.py --checkpoint checkpoints/cape_mix_v1.pt
 ```
+
+The benchmark measures fan-out at 1, 2, 5, 10, 25, 50, 100, 250, and 1000
+assertions and reports median, p95, throughput, token counts, and peak CUDA
+memory. Shared-context checkpoints also report context encoding and assertion
+processing separately.
 
 The challenge cases in `scripts/challenge.py` are frozen. Reference results
 are stored in `benchmarks/`.

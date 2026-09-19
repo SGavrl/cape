@@ -1,19 +1,27 @@
 import argparse
-import json
 from pathlib import Path
 
-import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 
-from cape.cape_model import CAPEModel
-from cape.dataset import CAPEDataset, make_collate_fn
+from cape.calibration import calibrated_probabilities, fit_calibration
+from cape.cape_model import SHARED_CONTEXT
+from cape.checkpoints import (
+    build_model_from_checkpoint,
+    checkpoint_architecture,
+    checkpoint_backbone,
+)
+from cape.dataset import (
+    CAPEDataset,
+    make_collate_fn,
+    make_shared_context_collate_fn,
+)
+from cape.metrics import metrics_from_arrays
 
 
 BATCH_SIZE = 64
 MAX_LENGTH = 256
-ECE_BINS = 15
 
 
 def infer_model_version(output_path, checkpoint):
@@ -26,426 +34,120 @@ def infer_model_version(output_path, checkpoint):
 
 
 def collect_logits(
-    model,
-    tokenizer,
-    dataset,
-    device,
+    model, tokenizer, dataset, device, architecture, max_length=MAX_LENGTH
 ):
-    collate_fn = make_collate_fn(
-        tokenizer,
-        MAX_LENGTH,
+    collate = (
+        make_shared_context_collate_fn(
+            tokenizer, max_length, include_auxiliary=False
+        )
+        if architecture == SHARED_CONTEXT
+        else make_collate_fn(tokenizer, max_length)
     )
-
     loader = DataLoader(
         dataset,
         batch_size=BATCH_SIZE,
         shuffle=False,
-        collate_fn=collate_fn,
+        collate_fn=collate,
         num_workers=4,
-        pin_memory=True,
+        pin_memory=device.type == "cuda",
     )
-
     logits_all = []
     labels_all = []
-
     model.eval()
-
     with torch.inference_mode():
         for batch in loader:
-            labels = batch.pop(
-                "labels"
-            ).to(
-                device,
-                non_blocking=True,
-            )
-
-            batch = {
-                key: value.to(
-                    device,
-                    non_blocking=True,
-                )
-                for key, value
-                in batch.items()
+            labels = batch.pop("labels").to(device, non_blocking=True)
+            inputs = {
+                key: value.to(device, non_blocking=True)
+                for key, value in batch.items()
             }
-
-            logits = model(**batch)
-
-            if not torch.isfinite(
-                logits
-            ).all():
-                raise RuntimeError(
-                    "Non-finite logits detected."
-                )
-
-            logits_all.append(
-                logits.float().cpu()
-            )
-
-            labels_all.append(
-                labels.float().cpu()
-            )
-
-    return (
-        torch.cat(logits_all),
-        torch.cat(labels_all),
-    )
+            logits = model(**inputs)
+            if not torch.isfinite(logits).all():
+                raise RuntimeError("non-finite logits during calibration")
+            logits_all.append(logits.float().cpu())
+            labels_all.append(labels.float().cpu())
+    return torch.cat(logits_all), torch.cat(labels_all)
 
 
-def binary_ece(
-    probabilities,
-    labels,
-    bins=15,
-):
-    probabilities = np.asarray(
-        probabilities
-    )
-
-    labels = np.asarray(
-        labels
-    )
-
-    edges = np.linspace(
-        0.0,
-        1.0,
-        bins + 1,
-    )
-
-    ece = 0.0
-
-    for i in range(bins):
-        lower = edges[i]
-        upper = edges[i + 1]
-
-        if i == bins - 1:
-            mask = (
-                (probabilities >= lower)
-                & (probabilities <= upper)
-            )
-        else:
-            mask = (
-                (probabilities >= lower)
-                & (probabilities < upper)
-            )
-
-        count = int(mask.sum())
-
-        if count == 0:
-            continue
-
-        predicted = (
-            probabilities[mask].mean()
-        )
-
-        observed = (
-            labels[mask].mean()
-        )
-
-        weight = (
-            count
-            / len(probabilities)
-        )
-
-        ece += (
-            weight
-            * abs(
-                predicted - observed
-            )
-        )
-
-    return float(ece)
-
-
-def metrics(
-    logits,
-    labels,
-    temperature,
-):
-    scaled_logits = (
-        logits / temperature
-    )
-
-    probabilities = torch.sigmoid(
-        scaled_logits
-    )
-
-    predictions = (
-        probabilities >= 0.5
-    ).float()
-
-    accuracy = (
-        predictions == labels
-    ).float().mean().item()
-
-    nll = (
-        torch.nn.functional
-        .binary_cross_entropy_with_logits(
-            scaled_logits,
-            labels,
-        )
-        .item()
-    )
-
-    brier = torch.mean(
-        (
-            probabilities - labels
-        ) ** 2
-    ).item()
-
-    ece = binary_ece(
-        probabilities.numpy(),
-        labels.numpy(),
-        ECE_BINS,
-    )
-
+def calibration_metrics(logits, labels, parameters):
+    probabilities = calibrated_probabilities(logits, parameters)
+    metrics = metrics_from_arrays(probabilities.numpy(), labels.numpy())
     return {
-        "accuracy": accuracy,
-        "nll": nll,
-        "brier_score": brier,
-        "ece": ece,
+        key: metrics[key]
+        for key in (
+            "accuracy",
+            "nll",
+            "brier_score",
+            "ece",
+            "adaptive_ece",
+            "high_confidence_errors",
+        )
     }
-
-
-def fit_temperature(
-    logits,
-    labels,
-):
-    # Optimize log(T), which guarantees
-    # that temperature always stays > 0.
-    log_temperature = torch.zeros(
-        (),
-        dtype=torch.float32,
-        requires_grad=True,
-    )
-
-    criterion = (
-        torch.nn.BCEWithLogitsLoss()
-    )
-
-    optimizer = torch.optim.LBFGS(
-        [log_temperature],
-        lr=0.1,
-        max_iter=100,
-        line_search_fn="strong_wolfe",
-    )
-
-    def closure():
-        optimizer.zero_grad()
-
-        temperature = (
-            log_temperature.exp()
-        )
-
-        loss = criterion(
-            logits / temperature,
-            labels,
-        )
-
-        loss.backward()
-
-        return loss
-
-    optimizer.step(closure)
-
-    temperature = (
-        log_temperature
-        .detach()
-        .exp()
-        .item()
-    )
-
-    return temperature
 
 
 def main():
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument(
-        "--checkpoint",
-        default=(
-            "checkpoints/"
-            "mix_v1/last.pt"
-        ),
+    parser = argparse.ArgumentParser(
+        description="Fit CAPE calibration parameters on validation data"
     )
-
+    parser.add_argument("--checkpoint", default="checkpoints/mix_v1/last.pt")
+    parser.add_argument("--validation", default="data/mix_validation.jsonl")
+    parser.add_argument("--output", default="checkpoints/cape_mix_v1.pt")
+    parser.add_argument("--model-version", default=None)
     parser.add_argument(
-        "--validation",
-        default=(
-            "data/"
-            "mix_validation.jsonl"
-        ),
+        "--method",
+        choices=("temperature", "platt", "beta"),
+        default="temperature",
     )
-
-    parser.add_argument(
-        "--output",
-        default=(
-            "checkpoints/"
-            "cape_mix_v1.pt"
-        ),
-    )
-
-    parser.add_argument(
-        "--model-version",
-        default=None,
-    )
-
     args = parser.parse_args()
 
-    if torch.cuda.is_available():
-        device = torch.device(
-            "cuda"
-        )
-    else:
-        device = torch.device(
-            "cpu"
-        )
-
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if device.type == "cuda":
-        torch.set_float32_matmul_precision(
-            "high"
-        )
-
-    print(
-        "Device:",
-        device,
-    )
-
+        torch.set_float32_matmul_precision("high")
     checkpoint = torch.load(
-        args.checkpoint,
-        map_location="cpu",
-        weights_only=False,
+        args.checkpoint, map_location="cpu", weights_only=False
     )
-
-    model_name = checkpoint[
-        "model_name"
-    ]
-
-    tokenizer = (
-        AutoTokenizer.from_pretrained(
-            model_name
-        )
-    )
-
-    model = CAPEModel(
-        model_name
-    )
-
-    model.load_state_dict(
-        checkpoint["model"]
-    )
-
-    model = model.to(
-        device
-    )
-
-    dataset = CAPEDataset(
-        args.validation
-    )
-
-    print(
-        "Validation examples:",
-        f"{len(dataset):,}",
-    )
-
+    architecture = checkpoint_architecture(checkpoint)
+    backbone = checkpoint_backbone(checkpoint)
+    max_length = int(checkpoint.get("max_length", MAX_LENGTH))
+    tokenizer = AutoTokenizer.from_pretrained(backbone)
+    model = build_model_from_checkpoint(checkpoint).to(device)
+    dataset = CAPEDataset(args.validation)
     logits, labels = collect_logits(
-        model,
-        tokenizer,
-        dataset,
-        device,
+        model, tokenizer, dataset, device, architecture, max_length
     )
 
-    before = metrics(
-        logits,
-        labels,
-        temperature=1.0,
+    identity = {"method": "temperature", "temperature": 1.0}
+    before = calibration_metrics(logits, labels, identity)
+    parameters = fit_calibration(logits, labels, method=args.method)
+    after = calibration_metrics(logits, labels, parameters)
+
+    print("Device:", device)
+    print("Validation examples:", f"{len(dataset):,}")
+    print("Method:", args.method)
+    print("Parameters:", parameters)
+    print("Before:", before)
+    print("After:", after)
+
+    checkpoint["calibration_parameters"] = parameters
+    if parameters["method"] == "temperature":
+        checkpoint["temperature"] = parameters["temperature"]
+    else:
+        checkpoint.pop("temperature", None)
+    checkpoint["model_version"] = args.model_version or infer_model_version(
+        args.output, checkpoint
     )
-
-    temperature = fit_temperature(
-        logits,
-        labels,
-    )
-
-    after = metrics(
-        logits,
-        labels,
-        temperature=temperature,
-    )
-
-    print()
-    print(
-        f"Temperature: "
-        f"{temperature:.6f}"
-    )
-
-    print()
-    print("Before calibration")
-    print("-" * 40)
-
-    for key, value in before.items():
-        print(
-            f"{key:<15} "
-            f"{value:.6f}"
-        )
-
-    print()
-    print("After calibration")
-    print("-" * 40)
-
-    for key, value in after.items():
-        print(
-            f"{key:<15} "
-            f"{value:.6f}"
-        )
-
-    output = Path(
-        args.output
-    )
-
-    output.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    checkpoint[
-        "temperature"
-    ] = temperature
-
-    checkpoint[
-        "model_version"
-    ] = (
-        args.model_version
-        or infer_model_version(
-            args.output,
-            checkpoint,
-        )
-    )
-
-    checkpoint[
-        "base_checkpoint"
-    ] = args.checkpoint
-
-    checkpoint[
-        "calibration"
-    ] = {
-        "validation_data": (
-            args.validation
-        ),
-        "temperature": (
-            temperature
-        ),
+    checkpoint["base_checkpoint"] = args.checkpoint
+    checkpoint["calibration"] = {
+        "validation_data": args.validation,
+        "method": args.method,
+        "parameters": parameters,
         "before": before,
         "after": after,
     }
-
-    torch.save(
-        checkpoint,
-        output,
-    )
-
-    print()
-    print(
-        f"Saved calibrated model to "
-        f"{output}"
-    )
+    output = Path(args.output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(checkpoint, output)
+    print("Saved calibrated model to", output)
 
 
 if __name__ == "__main__":

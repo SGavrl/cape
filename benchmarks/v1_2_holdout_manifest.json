@@ -1,0 +1,18 @@
+{
+  "name": "CAPE v1.2 frozen semantic holdout",
+  "status": "frozen before v1.2 training",
+  "generator_seed": 120243,
+  "examples": 450,
+  "sha256": "70a0585e2aa15fee79589547c0ca765e7f641b077dbb22235fcb23b34d9e7282",
+  "capabilities": [
+    "lexical_directionality",
+    "modality",
+    "negation",
+    "numeric",
+    "performance",
+    "quantifiers",
+    "systems",
+    "temporal",
+    "unsupported_inference"
+  ]
+}

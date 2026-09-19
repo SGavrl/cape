@@ -37,21 +37,22 @@ def cape_example(
     }
 
 
-def read_jsonl(path: Path, source: str):
+def convert_mnli(split):
     examples = []
-
-    with path.open() as f:
-        for line in f:
-            row = json.loads(line)
-
-            examples.append(
-                cape_example(
-                    context=row["context"],
-                    assertion=row["assertion"],
-                    label=row["label"],
-                    source=source,
-                )
+    for row in split:
+        label = row["label"]
+        if label == 1:
+            continue
+        if label not in (0, 2):
+            continue
+        examples.append(
+            cape_example(
+                context=row["premise"],
+                assertion=row["hypothesis"],
+                label=1 if label == 0 else 0,
+                source="mnli",
             )
+        )
 
     return examples
 
@@ -302,23 +303,25 @@ def main():
     )
 
     # -----------------------------------
-    # Existing MNLI CAPE data
+    # MNLI
     # -----------------------------------
 
-    print("Loading existing MNLI CAPE data...")
+    print("Downloading MNLI...")
+
+    mnli_source = load_dataset(
+        "nyu-mll/glue",
+        "mnli",
+    )
 
     mnli = {
-        "train": read_jsonl(
-            DATA_DIR / "train.jsonl",
-            "mnli",
+        "train": convert_mnli(
+            mnli_source["train"],
         ),
-        "validation": read_jsonl(
-            DATA_DIR / "validation.jsonl",
-            "mnli",
+        "validation": convert_mnli(
+            mnli_source["validation_matched"],
         ),
-        "test": read_jsonl(
-            DATA_DIR / "test.jsonl",
-            "mnli",
+        "test": convert_mnli(
+            mnli_source["validation_mismatched"],
         ),
     }
 

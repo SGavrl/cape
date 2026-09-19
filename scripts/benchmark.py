@@ -13,8 +13,13 @@ DEFAULT_CHECKPOINT = "checkpoints/cape_mix_v1.pt"
 
 DEFAULT_COUNTS = [
     1,
+    2,
+    5,
     10,
+    25,
+    50,
     100,
+    250,
     1000,
 ]
 
@@ -79,6 +84,17 @@ def build_assertions(count: int):
     return assertions
 
 
+def percentile(values, percentile_value):
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return ordered[0]
+    position = (len(ordered) - 1) * percentile_value
+    lower = int(position)
+    upper = min(lower + 1, len(ordered) - 1)
+    weight = position - lower
+    return ordered[lower] * (1.0 - weight) + ordered[upper] * weight
+
+
 def benchmark_count(
     cape: CAPE,
     context: str,
@@ -86,6 +102,7 @@ def benchmark_count(
     warmup_runs: int,
     repeat_runs: int,
     batch_size: int,
+    mode: str = "assertions",
 ):
     assertions = build_assertions(
         assertion_count
@@ -93,17 +110,32 @@ def benchmark_count(
 
     device = cape.device
 
+    def run():
+        if mode == "assertions":
+            return cape.judge_many(
+                context,
+                assertions,
+                batch_size=batch_size,
+            )
+        if mode == "choice":
+            result = cape.choose(
+                context,
+                assertions,
+                assertion_template="{choice}",
+                batch_size=batch_size,
+            )
+            return list(result.scores.values())
+        raise ValueError(f"unknown benchmark mode: {mode}")
+
     # Warmup
     for _ in range(warmup_runs):
-        cape.judge_many(
-            context,
-            assertions,
-            batch_size=batch_size,
-        )
+        run()
 
         synchronize(device)
 
     durations = []
+    context_durations = []
+    assertion_durations = []
 
     reset_peak_memory(
         device
@@ -116,11 +148,7 @@ def benchmark_count(
 
         start = time.perf_counter()
 
-        results = cape.judge_many(
-            context,
-            assertions,
-            batch_size=batch_size,
-        )
+        results = run()
 
         synchronize(
             device
@@ -140,6 +168,24 @@ def benchmark_count(
         durations.append(
             elapsed
         )
+
+        if cape.architecture == "shared_context_multitask":
+            synchronize(device)
+            context_start = time.perf_counter()
+            encoded = cape.encode_context(context)
+            synchronize(device)
+            context_durations.append(time.perf_counter() - context_start)
+
+            assertion_start = time.perf_counter()
+            encoded_results = cape.judge_encoded(
+                encoded,
+                assertions,
+                batch_size=batch_size,
+            )
+            synchronize(device)
+            assertion_durations.append(time.perf_counter() - assertion_start)
+            if len(encoded_results) != assertion_count:
+                raise RuntimeError("encoded inference returned wrong result count")
 
     median_seconds = (
         statistics.median(
@@ -188,6 +234,7 @@ def benchmark_count(
         "batch_size": (
             batch_size
         ),
+        "mode": mode,
         "median_ms": (
             median_seconds
             * 1000
@@ -196,6 +243,7 @@ def benchmark_count(
             mean_seconds
             * 1000
         ),
+        "p95_ms": percentile(durations, 0.95) * 1000,
         "min_ms": (
             min_seconds
             * 1000
@@ -212,6 +260,31 @@ def benchmark_count(
         ),
         "peak_memory_mb": (
             peak_memory_mb
+        ),
+        "context_encoding_median_ms": (
+            statistics.median(context_durations) * 1000
+            if context_durations
+            else None
+        ),
+        "assertion_processing_median_ms": (
+            statistics.median(assertion_durations) * 1000
+            if assertion_durations
+            else None
+        ),
+        "context_tokens": len(
+            cape.tokenizer(context, truncation=True, max_length=cape.max_length)[
+                "input_ids"
+            ]
+        ),
+        "assertion_tokens": sum(
+            len(
+                cape.tokenizer(
+                    assertion,
+                    truncation=True,
+                    max_length=cape.max_length,
+                )["input_ids"]
+            )
+            for assertion in assertions
         ),
     }
 
@@ -235,6 +308,7 @@ def print_result(result):
     print(
         f"{assertions:>5} assertions | "
         f"{result['median_ms']:>10.2f} ms total | "
+        f"p95 {result['p95_ms']:>10.2f} ms | "
         f"{result['ms_per_assertion']:>9.3f} ms/assertion | "
         f"{result['assertions_per_second']:>10.2f} assertions/s | "
         f"peak mem: {peak_memory_text}"
@@ -291,6 +365,12 @@ def main():
         ),
     )
 
+    parser.add_argument(
+        "--mode",
+        choices=("assertions", "choice"),
+        default="assertions",
+    )
+
     args = parser.parse_args()
 
     for count in args.counts:
@@ -322,6 +402,12 @@ def main():
     print("=" * 90)
 
     info = cape.info()
+    info["parameters"] = sum(
+        parameter.numel() for parameter in cape.model.parameters()
+    )
+    info["checkpoint_size_mb"] = (
+        Path(args.checkpoint).stat().st_size / (1024 ** 2)
+    )
 
     print(
         f"checkpoint:   "
@@ -347,6 +433,10 @@ def main():
         f"temperature:  "
         f"{info['temperature']:.6f}"
     )
+
+    print(f"architecture: {info['architecture']}")
+    print(f"parameters:   {info['parameters']:,}")
+    print(f"checkpoint:   {info['checkpoint_size_mb']:.1f} MB")
 
     print(
         f"batch size:   "
@@ -376,6 +466,7 @@ def main():
             warmup_runs=args.warmup_runs,
             repeat_runs=args.repeat_runs,
             batch_size=args.batch_size,
+            mode=args.mode,
         )
 
         results.append(
@@ -392,6 +483,7 @@ def main():
         "model": info,
         "benchmark": {
             "context": context,
+            "mode": args.mode,
             "batch_size": (
                 args.batch_size
             ),
