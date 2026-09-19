@@ -7,7 +7,12 @@ from pathlib import Path
 import torch
 from torch.utils.data import Dataset
 
-from .schema import AUXILIARY_LABELS, auxiliary_label, normalize_example
+from .schema import (
+    AUXILIARY_LABELS,
+    auxiliary_label,
+    normalize_example,
+    support_target,
+)
 
 
 class CAPEDataset(Dataset):
@@ -52,7 +57,7 @@ class CAPEDataset(Dataset):
 def _labels(batch, include_auxiliary):
     result = {
         "labels": torch.tensor(
-            [example["target"] for example in batch],
+            [support_target(example) for example in batch],
             dtype=torch.float32,
         )
     }

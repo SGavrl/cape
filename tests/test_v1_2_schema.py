@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from cape.dataset import CAPEDataset
+from cape.dataset import CAPEDataset, _labels
 from cape.schema import MISSING_LABEL, auxiliary_label, normalize_example
 from scripts.prepare_v1_2 import upgrade_v1_1_row
 
@@ -31,6 +31,15 @@ def test_schema_accepts_target_and_legacy_label(tmp_path):
     dataset = CAPEDataset(path)
     assert [row["target"] for row in dataset.examples] == [1.0, 0.0]
     assert dataset.examples[0]["nli_label"] == "entailment"
+
+
+def test_collator_labels_accept_legacy_and_v1_2_rows():
+    labels = _labels(
+        [{"label": 1}, {"target": 0.0}],
+        include_auxiliary=False,
+    )
+
+    assert labels["labels"].tolist() == [1.0, 0.0]
 
 
 def test_missing_auxiliary_label_is_masked():
