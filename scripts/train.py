@@ -36,6 +36,10 @@ CHECKPOINT_DIR = Path(
     )
 )
 
+INIT_CHECKPOINT = os.environ.get(
+    "CAPE_INIT_CHECKPOINT"
+)
+
 BATCH_SIZE = int(
     os.environ.get(
         "CAPE_BATCH_SIZE",
@@ -72,6 +76,57 @@ LOG_INTERVAL = 100
 # Set this to an integer like 200 for a short sanity run.
 # Leave as None for full training.
 MAX_TRAIN_STEPS = None
+
+
+def load_initial_weights(
+    model,
+    checkpoint_path,
+    *,
+    expected_model_name=None,
+):
+    checkpoint_path = Path(checkpoint_path)
+    checkpoint = torch.load(
+        checkpoint_path,
+        map_location="cpu",
+        weights_only=False,
+    )
+    if "model" not in checkpoint:
+        raise ValueError(
+            f"Init checkpoint is missing required field 'model': {checkpoint_path}"
+        )
+    checkpoint_model_name = checkpoint.get("model_name")
+    if (
+        expected_model_name
+        and checkpoint_model_name
+        and checkpoint_model_name != expected_model_name
+    ):
+        raise ValueError(
+            "Init checkpoint model_name does not match CAPE_MODEL_NAME: "
+            f"{checkpoint_model_name!r} != {expected_model_name!r}"
+        )
+    model.load_state_dict(checkpoint["model"])
+
+
+def create_optimizer(model):
+    return torch.optim.AdamW(
+        model.parameters(),
+        lr=LEARNING_RATE,
+        weight_decay=WEIGHT_DECAY,
+    )
+
+
+def validate_checkpoint_paths(init_checkpoint, checkpoint_dir):
+    if not init_checkpoint:
+        return
+    init_path = Path(init_checkpoint).resolve()
+    output_paths = {
+        (Path(checkpoint_dir) / "last.pt").resolve(),
+        (Path(checkpoint_dir) / "best.pt").resolve(),
+    }
+    if init_path in output_paths:
+        raise ValueError(
+            "CAPE_INIT_CHECKPOINT must not be one of the training output paths."
+        )
 
 
 # ---------------------------------------------------------
@@ -172,6 +227,11 @@ def main():
 
     device = torch.device("cuda")
 
+    validate_checkpoint_paths(
+        INIT_CHECKPOINT,
+        CHECKPOINT_DIR,
+    )
+
     # Use fast TF32-style matrix operations on the 4090
     # while keeping the model itself in FP32.
     torch.set_float32_matmul_precision(
@@ -190,6 +250,7 @@ def main():
     print(f"train:       {TRAIN_PATH}")
     print(f"validation:  {VAL_PATH}")
     print(f"checkpoints: {CHECKPOINT_DIR}")
+    print(f"init:        {INIT_CHECKPOINT or 'pretrained DeBERTa'}")
     print(f"batch size:  {BATCH_SIZE}")
     print(f"max length:  {MAX_LENGTH}")
     print(f"epochs:      {EPOCHS}")
@@ -256,13 +317,20 @@ def main():
 
     model = CAPEModel(
         MODEL_NAME
-    ).to(device)
-
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
-        lr=LEARNING_RATE,
-        weight_decay=WEIGHT_DECAY,
     )
+
+    if INIT_CHECKPOINT:
+        print(
+            f"Loading model weights from init checkpoint: {INIT_CHECKPOINT}"
+        )
+        load_initial_weights(
+            model,
+            INIT_CHECKPOINT,
+            expected_model_name=MODEL_NAME,
+        )
+
+    model = model.to(device)
+    optimizer = create_optimizer(model)
 
     full_training_steps = (
         len(train_loader)
@@ -477,6 +545,7 @@ def main():
         checkpoint = {
             "model": model.state_dict(),
             "model_name": MODEL_NAME,
+            "init_checkpoint": INIT_CHECKPOINT,
             "epoch": epoch + 1,
             "global_step": global_step,
             "validation": metrics,
@@ -494,6 +563,9 @@ def main():
                 ),
                 "warmup_ratio": (
                     WARMUP_RATIO
+                ),
+                "init_checkpoint": (
+                    INIT_CHECKPOINT
                 ),
             },
         }

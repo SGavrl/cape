@@ -6,13 +6,22 @@ build-backend = "setuptools.build_meta"
 name = "cape-ai"
 version = "0.1.0"
 description = "Calibrated Assertion Probability Estimator"
+readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.11"
 dependencies = [
+    "datasets",
+    "matplotlib",
+    "numpy",
+    "scikit-learn",
     "torch",
     "transformers",
     "sentencepiece",
     "protobuf",
 ]
+
+[project.optional-dependencies]
+dev = ["pytest"]
 
 [tool.setuptools.packages.find]
 include = ["cape*"]

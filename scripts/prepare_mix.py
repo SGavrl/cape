@@ -3,9 +3,6 @@ import random
 from collections import Counter
 from pathlib import Path
 
-from datasets import load_dataset
-
-
 SEED = 1337
 RNG = random.Random(SEED)
 
@@ -292,6 +289,13 @@ def print_stats(name, examples):
 
 
 def main():
+    try:
+        from datasets import load_dataset
+    except ImportError as error:
+        raise RuntimeError(
+            "Dataset preparation requires the 'datasets' package."
+        ) from error
+
     DATA_DIR.mkdir(
         parents=True,
         exist_ok=True,

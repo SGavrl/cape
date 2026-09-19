@@ -16,6 +16,15 @@ MAX_LENGTH = 256
 ECE_BINS = 15
 
 
+def infer_model_version(output_path, checkpoint):
+    stem = Path(output_path).stem
+    if stem == "cape_v1_1":
+        return "cape-v1.1"
+    if stem == "cape_mix_v1":
+        return "cape-mix-v1"
+    return checkpoint.get("model_version", stem.replace("_", "-"))
+
+
 def collect_logits(
     model,
     tokenizer,
@@ -274,6 +283,11 @@ def main():
         ),
     )
 
+    parser.add_argument(
+        "--model-version",
+        default=None,
+    )
+
     args = parser.parse_args()
 
     if torch.cuda.is_available():
@@ -397,7 +411,13 @@ def main():
 
     checkpoint[
         "model_version"
-    ] = "cape-mix-v1"
+    ] = (
+        args.model_version
+        or infer_model_version(
+            args.output,
+            checkpoint,
+        )
+    )
 
     checkpoint[
         "base_checkpoint"

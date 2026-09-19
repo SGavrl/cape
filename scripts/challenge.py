@@ -1,3 +1,5 @@
+import argparse
+
 from cape import CAPE
 
 
@@ -313,8 +315,17 @@ CASES = {
 
 
 def main():
+    parser = argparse.ArgumentParser(
+        description="Run the frozen CAPE hard challenge."
+    )
+    parser.add_argument(
+        "--checkpoint",
+        default=CHECKPOINT,
+    )
+    args = parser.parse_args()
+
     cape = CAPE.from_checkpoint(
-        CHECKPOINT
+        args.checkpoint
     )
 
     print()
